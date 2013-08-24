@@ -5,6 +5,10 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.util.*;
 
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.Options;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -12,6 +16,7 @@ import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.jsoup.Jsoup;
+import org.jsoup.helper.StringUtil;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -55,15 +60,23 @@ public class Main {
     }
 
     private String getLinkAtPos(List<String> links, int pos) {
-        String link = links.get(pos);
-        if (isQuestion(link)) {
-            return link;
+        String link = null;
+        for (int i = 0; i < links.size(); i++) {
+            link = links.get(i);
+            if (isQuestion(link)) {
+                if (pos == 1)
+                    break;
+                else {
+                    pos = pos - 1;
+                    continue;
+                }
+            }
         }
-        return null;
+        return link;
     }
 
-    private String getAnswer(int num, List<String> links) throws Exception {
-        String link = getLinkAtPos(links, num);
+    private String getAnswer(int pos, CommandLine cmd, List<String> links) throws Exception {
+        String link = getLinkAtPos(links, pos);
         Document doc = getResult(link + "?answertab=votes");
         Element firstAnswer = doc.select(".answer").get(0);
         List<Element> instructions = add(firstAnswer.select("pre"), firstAnswer.select("code"));
@@ -72,7 +85,9 @@ public class Main {
         // args['tags'] = [t.text for t in html('.post-tag')]
         // TODO: args all
         String answer = formatOutput(instructions.get(0).text());
-        
+        if (answer == null || answer.isEmpty())
+            answer = "< no answer given >";
+        answer = answer.trim();
         return answer;
     }
 
@@ -107,16 +122,51 @@ public class Main {
         }
     }
 
-    private void run() throws Exception {
-        List<String> links = getLinks("format date bash");
+    private void getInstructions(CommandLine cmd) throws Exception {
+        String query = concat(cmd.getArgs(), " ");
+        List<String> links = getLinks(query);
         if (links.isEmpty())
             return;
-        String answer = getAnswer(0, links);
-        System.out.println(answer);
+        int numAnswers = Integer.parseInt(cmd.getOptionValue("num-answers", "1"));
+        boolean appendHeader = numAnswers > 1;
+        int initialPosition = Integer.parseInt(cmd.getOptionValue("pos", "1"));
+        for (int answerNumber = 0; answerNumber < numAnswers; answerNumber++) {
+            int currentPosition = answerNumber + initialPosition;
+            String answer = getAnswer(currentPosition, cmd, links);
+            if (answer == null)
+                continue;
+            if (appendHeader)
+                answer = String.format("--- Answer %d ---\n%s", currentPosition, answer);
+            answer += "\n";
+            System.out.println(answer);
+        }
+    }
+
+    public static String concat(String[] array, final String separator) {
+        if (array == null) {
+            return null;
+        }
+
+        final StringBuilder buffer = new StringBuilder();
+        boolean bInit = false;
+        for (String s : array) {
+            if (bInit) {
+                buffer.append(separator);
+            }
+            bInit = true;
+            buffer.append(s);
+        }
+        return buffer.toString();
     }
 
     public static void main(String[] args) throws Exception {
+        Options options = new Options();
+        options.addOption("p", "pos", true, "select answer in specified position (default: 1)");
+        options.addOption("n", "num-answers", true, "number of answers to return");
+        CommandLineParser parser = new BasicParser();
+        CommandLine cmd = parser.parse(options, args);
+
         Main main = new Main();
-        main.run();
+        main.getInstructions(cmd);
     }
 }

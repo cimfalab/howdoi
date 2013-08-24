@@ -3,4 +3,5 @@ howdoi
 
 The Java port of [howdoi](https://github.com/gleitz/howdoi).
 
-    Usage
+    > howdoi.cmd format date bash
+    DATE=`date +%Y-%m-%d`
