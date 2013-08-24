@@ -82,10 +82,13 @@ public class Main {
         Element firstAnswer = doc.select(".answer").get(0);
         List<Element> instructions = add(firstAnswer.select("pre"), firstAnswer.select("code"));
 
-        // TODO: the StackOverflow tags
-        // args['tags'] = [t.text for t in html('.post-tag')]
-        // TODO: args all
-        String answer = formatOutput(instructions.get(0).text());
+        // TODO: the StackOverflow tags for color, --all argument
+        String answer = "";
+        if (instructions.isEmpty()) {
+            answer = firstAnswer.select(".post-text").get(0).text();
+        } else {
+            answer = formatOutput(instructions.get(0).text());
+        }
         if (answer == null || answer.isEmpty())
             answer = "< no answer given >";
         answer = answer.trim();
@@ -123,12 +126,14 @@ public class Main {
         }
     }
 
-    private void getInstructions(CommandLine cmd) throws Exception {
-        String query = concat(cmd.getArgs(), " ");
+    private String getInstructions(CommandLine cmd, OutputStream out) throws Exception {
+        String query = StringUtil.join(Arrays.asList(cmd.getArgs()), " ");
+        print(out, "Searching answers for the query '" + query + "'...\n");
         List<String> links = getLinks(query);
         if (links.isEmpty())
-            return;
+            return "";
         int numAnswers = Integer.parseInt(cmd.getOptionValue("num-answers", "1"));
+        List<String> answers = new ArrayList<String>();
         boolean appendHeader = numAnswers > 1;
         int initialPosition = Integer.parseInt(cmd.getOptionValue("pos", "1"));
         for (int answerNumber = 0; answerNumber < numAnswers; answerNumber++) {
@@ -137,42 +142,38 @@ public class Main {
             if (answer == null)
                 continue;
             if (appendHeader)
-                answer = String.format("--- Answer %d ---\n%s", currentPosition, answer);
+                answer = String.format("--- Answer %d -> %s\n%s", currentPosition, links.get(answerNumber), answer);
             answer += "\n";
-            System.out.println(answer);
+            answers.add(answer);
         }
+        return StringUtil.join(answers, "\n");
     }
 
-    public static String concat(String[] array, final String separator) {
-        if (array == null) {
-            return null;
-        }
-
-        final StringBuilder buffer = new StringBuilder();
-        boolean bInit = false;
-        for (String s : array) {
-            if (bInit) {
-                buffer.append(separator);
-            }
-            bInit = true;
-            buffer.append(s);
-        }
-        return buffer.toString();
-    }
-
-    public static void main(String[] args) throws Exception {
+    public static void run(String[] args, OutputStream out) throws Exception {
         Options options = new Options();
         options.addOption("p", "pos", true, "select answer in specified position (default: 1)");
         options.addOption("n", "num-answers", true, "number of answers to return");
         CommandLineParser parser = new BasicParser();
         CommandLine cmd = parser.parse(options, args);
-
+        
         if (cmd.getArgs().length == 0) {
             HelpFormatter formatter = new HelpFormatter();
             formatter.printHelp("howdoi", options);
             return;
         }
         Main main = new Main();
-        main.getInstructions(cmd);
+        String insturctions = main.getInstructions(cmd, out);
+        if (insturctions == null || insturctions.isEmpty())
+            insturctions = "Sorry, couldn\'t find any help with that topic\n";
+        print(out, insturctions);
+    }
+
+    private static void print(OutputStream out, String s) throws Exception {
+        out.write(s.getBytes("UTF-8"));
+        out.flush();
+    }
+
+    public static void main(String[] args) throws Exception {
+        Main.run(args, System.out);
     }
 }
