@@ -8,6 +8,7 @@ import java.util.*;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -166,6 +167,11 @@ public class Main {
         CommandLineParser parser = new BasicParser();
         CommandLine cmd = parser.parse(options, args);
 
+        if (cmd.getArgs().length == 0) {
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp("howdoi", options);
+            return;
+        }
         Main main = new Main();
         main.getInstructions(cmd);
     }
