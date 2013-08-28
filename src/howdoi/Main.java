@@ -33,8 +33,6 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 public class Main {
-    final static String SEARCH_URL = "http://www.google.com/search?q=site:stackoverflow.com%20";
-
     Handler handler;
 
     private List<String> getLinks(String site, String query) throws Exception {
@@ -64,8 +62,7 @@ public class Main {
                 if (pos == 1) {
                     link = links.get(i);
                     break;
-                }
-                else {
+                } else {
                     pos = pos - 1;
                     continue;
                 }
@@ -128,11 +125,9 @@ public class Main {
 
         HttpResponse response = httpclient.execute(request);
         try {
-            //System.out.println(response.getStatusLine());
             HttpEntity entity = response.getEntity();
             byte[] bytes = EntityUtils.toByteArray(entity);
             String html = new String(bytes, "UTF-8");
-            //System.out.println("response [" + html + "]");
             EntityUtils.consume(entity);
             return Jsoup.parse(new ByteArrayInputStream(bytes), "UTF-8", "");
         } finally {
@@ -147,6 +142,7 @@ public class Main {
         List<String> links = getLinks(site, query);
         if (links.isEmpty())
             return "";
+        print(out, String.format("Got %d links. Starting to visit each link...\n", links.size()));
         int numAnswers = Integer.parseInt(cmd.getOptionValue("num-answers", "1"));
         List<String> answers = new ArrayList<String>();
         boolean appendHeader = numAnswers > 1;
@@ -156,12 +152,14 @@ public class Main {
             String answer = getAnswer(currentPosition, cmd, links, out);
             if (answer == null)
                 continue;
-            if (appendHeader)
-                answer = String.format("--- Answer %d -> %s\n%s", currentPosition, links.get(answerNumber), answer);
+            if (!handler.useCustomFormat()) {
+                if (appendHeader)
+                    answer = String.format("--- Answer %d -> %s\n%s", currentPosition, links.get(answerNumber), answer);
+            }
             answer += "\n";
             answers.add(answer);
         }
-        return StringUtil.join(answers, "\n");
+        return handler.formatOutput(answers);
     }
 
     public void run(String[] args, OutputStream out) throws Exception {

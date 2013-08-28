@@ -2,6 +2,7 @@ package howdoi;
 
 import java.util.List;
 
+import org.jsoup.helper.StringUtil;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
@@ -30,5 +31,13 @@ public class StackoverflowHandler implements Handler {
 
     private String formatOutput(String text) {
         return text;
+    }
+
+    public boolean useCustomFormat() {
+        return false;
+    }
+
+    public String formatOutput(List<String> answers) {
+        return StringUtil.join(answers, "\n");
     }
 }
