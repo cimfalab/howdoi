@@ -3,7 +3,13 @@ package howdoi;
 import java.io.*;
 import java.net.URI;
 import java.net.URLEncoder;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.*;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -14,6 +20,10 @@ import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.conn.ClientConnectionManager;
+import org.apache.http.conn.scheme.Scheme;
+import org.apache.http.conn.scheme.SchemeRegistry;
+import org.apache.http.conn.ssl.SSLSocketFactory;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.jsoup.Jsoup;
@@ -25,48 +35,36 @@ import org.jsoup.select.Elements;
 public class Main {
     final static String SEARCH_URL = "http://www.google.com/search?q=site:stackoverflow.com%20";
 
-    private List<Element> add(Elements e1, Elements e2) throws Exception {
-        List<Element> list = new ArrayList<Element>();
+    Handler handler;
 
-        Iterator<Element> iterator = e1.iterator();
-        while (iterator.hasNext()) {
-            list.add(iterator.next());
-        }
-        iterator = e2.iterator();
-        while (iterator.hasNext()) {
-            list.add(iterator.next());
-        }
-        return list;
-    }
-
-    private List<String> getLinks(String query) throws Exception {
+    private List<String> getLinks(String site, String query) throws Exception {
         List<String> list = new ArrayList<String>();
 
-        Document doc = getResult(SEARCH_URL + URLEncoder.encode(query, "UTF-8"));
+        String q = "http://www.google.com/search?q=site:" + site + "%20";
+        Document doc = getResult(q + URLEncoder.encode(query, "UTF-8"));
         Elements elements = doc.select(".l");
         Iterator<Element> iterator = elements.iterator();
         while (iterator.hasNext()) {
-            list.add(iterator.next().attr("href"));
+            String href = iterator.next().attr("href");
+            list.add(href);
         }
         elements = doc.select(".r a");
         iterator = elements.iterator();
         while (iterator.hasNext()) {
-            list.add(iterator.next().attr("href"));
+            String href = iterator.next().attr("href");
+            list.add(href);
         }
         return list;
-    }
-
-    private boolean isQuestion(String link) {
-        return link.matches(".*questions/\\d+/.*");
     }
 
     private String getLinkAtPos(List<String> links, int pos) {
         String link = null;
         for (int i = 0; i < links.size(); i++) {
-            link = links.get(i);
-            if (isQuestion(link)) {
-                if (pos == 1)
+            if (handler.isQuestion(links.get(i))) {
+                if (pos == 1) {
+                    link = links.get(i);
                     break;
+                }
                 else {
                     pos = pos - 1;
                     continue;
@@ -76,42 +74,58 @@ public class Main {
         return link;
     }
 
-    private String getAnswer(int pos, CommandLine cmd, List<String> links) throws Exception {
+    private String getAnswer(int pos, CommandLine cmd, List<String> links, OutputStream out) throws Exception {
         String link = getLinkAtPos(links, pos);
-        Document doc = getResult(link + "?answertab=votes");
-        Element firstAnswer = doc.select(".answer").get(0);
-        List<Element> instructions = add(firstAnswer.select("pre"), firstAnswer.select("code"));
-
-        // TODO: the StackOverflow tags for color, --all argument
-        String answer = "";
-        if (instructions.isEmpty()) {
-            answer = firstAnswer.select(".post-text").get(0).text();
-        } else {
-            answer = formatOutput(instructions.get(0).text());
+        if (link == null) {
+            print(out, "There is no corresponding question link\n");
+            return "";
         }
+        //print(out, "Getting answer from " + (link + handler.getAnswerQueryString()) + "...\n");
+        Document doc = getResult(link + handler.getAnswerQueryString());
+        String answer = handler.getAnswer(link, doc);
+
         if (answer == null || answer.isEmpty())
             answer = "< no answer given >";
         answer = answer.trim();
         return answer;
     }
 
-    private String formatOutput(String text) {
-        return text;
-    }
-
     private Document getResult(String url) throws Exception {
         DefaultHttpClient httpclient = new DefaultHttpClient();
+
+        // javax.net.ssl.SSLPeerUnverifiedException: peer not authenticated
+        try {
+            SSLContext ctx = SSLContext.getInstance("TLS");
+            X509TrustManager tm = new X509TrustManager() {
+                public void checkClientTrusted(X509Certificate[] xcs, String string) throws CertificateException {
+                }
+
+                public void checkServerTrusted(X509Certificate[] xcs, String string) throws CertificateException {
+                }
+
+                public X509Certificate[] getAcceptedIssuers() {
+                    return null;
+                }
+            };
+            ctx.init(null, new TrustManager[]{ tm }, null);
+            SSLSocketFactory sf = new SSLSocketFactory(ctx, SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+            ClientConnectionManager ccm = httpclient.getConnectionManager();
+            Scheme https = new Scheme("https", 443, sf);
+            SchemeRegistry sr = ccm.getSchemeRegistry();
+            sr.register(https);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         URIBuilder builder = new URIBuilder(url);
         /*
         builder.setScheme("http").setHost("www.google.com").setPath("/search")
             .setParameter("q", "site:stackoverflow.com " + "format date bash");
         */
         URI uri = builder.build();
-        //System.out.println("uri - " + uri);
         HttpGet request = new HttpGet(uri);
         // If User-Agent is not set, the href attribute is prepended like "/url?q=http://stackoverflow.com/questions/1401482/yyyy-mm-dd-format-date-in-shell-script".
         request.setHeader("User-Agent", "Mozilla/5.0 (Windows; Windows NT 6.1) AppleWebKit/536.5 (KHTML, like Gecko) Chrome/19.0.1084.46 Safari/536.5");
-        
+
         HttpResponse response = httpclient.execute(request);
         try {
             //System.out.println(response.getStatusLine());
@@ -127,9 +141,10 @@ public class Main {
     }
 
     private String getInstructions(CommandLine cmd, OutputStream out) throws Exception {
+        String site = cmd.getOptionValue("site", "stackoverflow.com");
         String query = StringUtil.join(Arrays.asList(cmd.getArgs()), " ");
-        print(out, "Searching answers for the query '" + query + "'...\n");
-        List<String> links = getLinks(query);
+        print(out, String.format("Searching answers for the query '%s' in %s...\n", query, site));
+        List<String> links = getLinks(site, query);
         if (links.isEmpty())
             return "";
         int numAnswers = Integer.parseInt(cmd.getOptionValue("num-answers", "1"));
@@ -138,7 +153,7 @@ public class Main {
         int initialPosition = Integer.parseInt(cmd.getOptionValue("pos", "1"));
         for (int answerNumber = 0; answerNumber < numAnswers; answerNumber++) {
             int currentPosition = answerNumber + initialPosition;
-            String answer = getAnswer(currentPosition, cmd, links);
+            String answer = getAnswer(currentPosition, cmd, links, out);
             if (answer == null)
                 continue;
             if (appendHeader)
@@ -149,20 +164,29 @@ public class Main {
         return StringUtil.join(answers, "\n");
     }
 
-    public static void run(String[] args, OutputStream out) throws Exception {
+    public void run(String[] args, OutputStream out) throws Exception {
+        run(args, new StackoverflowHandler(), out);
+    }
+
+    public void run(String[] args, Handler handler, OutputStream out) throws Exception {
+        this.handler = handler;
+        if (this.handler == null) {
+            this.handler = new StackoverflowHandler();
+        }
+
         Options options = new Options();
         options.addOption("p", "pos", true, "select answer in specified position (default: 1)");
         options.addOption("n", "num-answers", true, "number of answers to return");
+        options.addOption("site", true, "site to be queried");
         CommandLineParser parser = new BasicParser();
         CommandLine cmd = parser.parse(options, args);
-        
+
         if (cmd.getArgs().length == 0) {
             HelpFormatter formatter = new HelpFormatter();
             formatter.printHelp("howdoi", options);
             return;
         }
-        Main main = new Main();
-        String insturctions = main.getInstructions(cmd, out);
+        String insturctions = getInstructions(cmd, out);
         if (insturctions == null || insturctions.isEmpty())
             insturctions = "Sorry, couldn\'t find any help with that topic\n";
         print(out, insturctions);
@@ -174,6 +198,7 @@ public class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        Main.run(args, System.out);
+        Main main = new Main();
+        main.run(args, System.out);
     }
 }
