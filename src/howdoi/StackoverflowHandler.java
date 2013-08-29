@@ -1,5 +1,6 @@
 package howdoi;
 
+import java.io.OutputStream;
 import java.util.List;
 
 import org.jsoup.helper.StringUtil;
@@ -15,7 +16,7 @@ public class StackoverflowHandler implements Handler {
         return "?answertab=votes";
     }
 
-    public String getAnswer(String link, Document doc) throws Exception {
+    public String getAnswer(String link, Document doc, OutputStream out) throws Exception {
         Element firstAnswer = doc.select(".answer").get(0);
         List<Element> instructions = HandlerUtil.add(firstAnswer.select("pre"), firstAnswer.select("code"));
 

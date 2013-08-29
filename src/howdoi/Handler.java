@@ -1,5 +1,6 @@
 package howdoi;
 
+import java.io.OutputStream;
 import java.util.List;
 
 import org.jsoup.nodes.Document;
@@ -9,7 +10,7 @@ public interface Handler {
 
     String getAnswerQueryString();
 
-    String getAnswer(String link, Document doc) throws Exception;
+    String getAnswer(String link, Document doc, OutputStream out) throws Exception;
 
     boolean useCustomFormat();
 

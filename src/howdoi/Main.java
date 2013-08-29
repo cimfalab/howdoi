@@ -34,6 +34,29 @@ import org.jsoup.select.Elements;
 
 public class Main {
     Handler handler;
+    static Scheme https;
+
+    private synchronized static void initializeSSL() {
+        try {
+            SSLContext ctx = SSLContext.getInstance("TLS");
+            X509TrustManager tm = new X509TrustManager() {
+                public void checkClientTrusted(X509Certificate[] xcs, String string) throws CertificateException {
+                }
+                
+                public void checkServerTrusted(X509Certificate[] xcs, String string) throws CertificateException {
+                }
+                
+                public X509Certificate[] getAcceptedIssuers() {
+                    return null;
+                }
+            };
+            ctx.init(null, new TrustManager[]{ tm }, null);
+            SSLSocketFactory sslSocketFactory = new SSLSocketFactory(ctx, SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+            https = new Scheme("https", 443, sslSocketFactory);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     private List<String> getLinks(String site, String query) throws Exception {
         List<String> list = new ArrayList<String>();
@@ -79,7 +102,7 @@ public class Main {
         }
         //print(out, "Getting answer from " + (link + handler.getAnswerQueryString()) + "...\n");
         Document doc = getResult(link + handler.getAnswerQueryString());
-        String answer = handler.getAnswer(link, doc);
+        String answer = handler.getAnswer(link, doc, out);
 
         if (answer == null || answer.isEmpty())
             answer = "< no answer given >";
@@ -91,28 +114,14 @@ public class Main {
         DefaultHttpClient httpclient = new DefaultHttpClient();
 
         // javax.net.ssl.SSLPeerUnverifiedException: peer not authenticated
-        try {
-            SSLContext ctx = SSLContext.getInstance("TLS");
-            X509TrustManager tm = new X509TrustManager() {
-                public void checkClientTrusted(X509Certificate[] xcs, String string) throws CertificateException {
-                }
-
-                public void checkServerTrusted(X509Certificate[] xcs, String string) throws CertificateException {
-                }
-
-                public X509Certificate[] getAcceptedIssuers() {
-                    return null;
-                }
-            };
-            ctx.init(null, new TrustManager[]{ tm }, null);
-            SSLSocketFactory sf = new SSLSocketFactory(ctx, SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
+        if (url.startsWith("https")) {
+            if (https == null)
+                initializeSSL();
             ClientConnectionManager ccm = httpclient.getConnectionManager();
-            Scheme https = new Scheme("https", 443, sf);
             SchemeRegistry sr = ccm.getSchemeRegistry();
             sr.register(https);
-        } catch (Exception e) {
-            e.printStackTrace();
         }
+
         URIBuilder builder = new URIBuilder(url);
         /*
         builder.setScheme("http").setHost("www.google.com").setPath("/search")
@@ -127,7 +136,6 @@ public class Main {
         try {
             HttpEntity entity = response.getEntity();
             byte[] bytes = EntityUtils.toByteArray(entity);
-            String html = new String(bytes, "UTF-8");
             EntityUtils.consume(entity);
             return Jsoup.parse(new ByteArrayInputStream(bytes), "UTF-8", "");
         } finally {
@@ -142,19 +150,21 @@ public class Main {
         List<String> links = getLinks(site, query);
         if (links.isEmpty())
             return "";
-        print(out, String.format("Got %d links. Starting to visit each link...\n", links.size()));
         int numAnswers = Integer.parseInt(cmd.getOptionValue("num-answers", "1"));
+        print(out, String.format("Got %d links. Starting to visit each link... (Max %d links)\n", links.size(), numAnswers));
         List<String> answers = new ArrayList<String>();
         boolean appendHeader = numAnswers > 1;
         int initialPosition = Integer.parseInt(cmd.getOptionValue("pos", "1"));
         for (int answerNumber = 0; answerNumber < numAnswers; answerNumber++) {
             int currentPosition = answerNumber + initialPosition;
+            String link = links.get(answerNumber);
+            print(out, String.format(" Visiting... (%d)\n", answerNumber));
             String answer = getAnswer(currentPosition, cmd, links, out);
             if (answer == null)
                 continue;
             if (!handler.useCustomFormat()) {
                 if (appendHeader)
-                    answer = String.format("--- Answer %d -> %s\n%s", currentPosition, links.get(answerNumber), answer);
+                    answer = String.format("--- Answer %d -> %s\n%s", currentPosition, link, answer);
             }
             answer += "\n";
             answers.add(answer);
