@@ -62,7 +62,8 @@ public class Main {
         List<String> list = new ArrayList<String>();
 
         String q = "http://www.google.com/search?q=site:" + site + "%20";
-        Document doc = getResult(q + URLEncoder.encode(query, "UTF-8"));
+        String url = q + URLEncoder.encode(query, "UTF-8");
+        Document doc = getResult(url);
         Elements elements = doc.select(".l");
         Iterator<Element> iterator = elements.iterator();
         while (iterator.hasNext()) {
@@ -94,12 +95,17 @@ public class Main {
         return link;
     }
 
+    @Deprecated
     private String getAnswer(int pos, CommandLine cmd, List<String> links, OutputStream out) throws Exception {
         String link = getLinkAtPos(links, pos);
         if (link == null) {
             print(out, "There is no corresponding question link\n");
             return "";
         }
+        return getAnswer(pos, cmd, link, out);
+    }
+
+    private String getAnswer(int pos, CommandLine cmd, String link, OutputStream out) throws Exception {
         //print(out, "Getting answer from " + (link + handler.getAnswerQueryString()) + "...\n");
         Document doc = getResult(link + handler.getAnswerQueryString());
         String answer = handler.getAnswer(link, doc, out);
@@ -158,8 +164,9 @@ public class Main {
         for (int answerNumber = 0; answerNumber < numAnswers; answerNumber++) {
             int currentPosition = answerNumber + initialPosition;
             String link = links.get(answerNumber);
-            print(out, String.format(" Visiting... (%d)\n", answerNumber));
-            String answer = getAnswer(currentPosition, cmd, links, out);
+            print(out, String.format(" Visiting... (%d)\n", (answerNumber + 1)));
+            //String answer = getAnswer(currentPosition, cmd, links, out);
+            String answer = getAnswer(currentPosition, cmd, link, out);
             if (answer == null)
                 continue;
             if (!handler.useCustomFormat()) {
