@@ -164,7 +164,7 @@ public class Main {
         for (int answerNumber = 0; answerNumber < numAnswers; answerNumber++) {
             int currentPosition = answerNumber + initialPosition;
             String link = links.get(answerNumber);
-            print(out, String.format(" Visiting... (%d)\n", (answerNumber + 1)));
+            print(out, handler.formatVisiting(answerNumber, link));
             //String answer = getAnswer(currentPosition, cmd, links, out);
             String answer = getAnswer(currentPosition, cmd, link, out);
             if (answer == null)

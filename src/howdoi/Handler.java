@@ -15,4 +15,5 @@ public interface Handler {
     boolean useCustomFormat();
 
     String formatOutput(List<String> answers);
+    String formatVisiting(int answerNumber, String link);
 }

@@ -45,4 +45,8 @@ public class StackoverflowHandler implements Handler {
     public String formatOutput(List<String> answers) {
         return StringUtil.join(answers, "\n");
     }
+
+    public String formatVisiting(int answerNumber, String link) {
+        return String.format(" Visiting... [%d]\n", answerNumber + 1);
+    }
 }

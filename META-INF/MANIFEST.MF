@@ -1,6 +1,6 @@
 Manifest-Version: 1.0
 Bundle-Name: howdoi
 Bundle-Vendor: mariah
-Bundle-Version: 1.0.0 (20130830)
+Bundle-Version: 1.0.1 (20130924)
 Bundle-Description: The Java port of howdoi
 Bundle-DocURL: https://github.com/cimfalab/howdoi
